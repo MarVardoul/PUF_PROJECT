@@ -1,0 +1,15 @@
+.Xil/
+*.jou
+*.log
+*.str
+
+*.cache/
+*.runs/
+*.sim/
+*.gen/
+*.hw/
+*.ip_user_files/
+
+*.wdb
+*.pb
+*.dcp
