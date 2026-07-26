@@ -1,8 +1,9 @@
 set_property PACKAGE_PIN D7 [get_ports SYS_CLK_P]
 set_property PACKAGE_PIN D6 [get_ports SYS_CLK_N]
-set_property IOSTANDARD LVDS [get_ports {SYS_CLK_P SYS_CLK_N}]
+set_property IOSTANDARD LVDS [get_ports SYS_CLK_P]
+set_property IOSTANDARD LVDS [get_ports SYS_CLK_N]
 
-create_clock -name SYS_CLK -period 10.000 [get_ports SYS_CLK_P]
+create_clock -period 10.000 -name SYS_CLK [get_ports SYS_CLK_P]
 
 
 set_property PACKAGE_PIN AB1 [get_ports {PL_USER_SW[0]}]
@@ -30,3 +31,6 @@ set_property PACKAGE_PIN AE5 [get_ports {PL_USER_LED[3]}]
 set_property PACKAGE_PIN AH1 [get_ports {PL_USER_LED[4]}]
 
 set_property IOSTANDARD LVCMOS12 [get_ports {PL_USER_LED[*]}]
+
+
+
