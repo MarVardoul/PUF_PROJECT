@@ -11,7 +11,9 @@ entity ro_puf_core is
         RESPONSE   : out STD_LOGIC;
         VALID      : out STD_LOGIC;
         PAIR_VALID : out STD_LOGIC;
-        DELTA      : out STD_LOGIC_VECTOR(24 downto 0)
+        DELTA      : out STD_LOGIC_VECTOR(24 downto 0);
+        COUNT_A    : out STD_LOGIC_VECTOR(23 downto 0);
+        COUNT_B    : out STD_LOGIC_VECTOR(23 downto 0)
     );
 end ro_puf_core;
 
@@ -118,5 +120,7 @@ begin
 
     PAIR_VALID <= pair_valid_internal;
     VALID      <= comparator_valid_internal and pair_valid_internal;
+    COUNT_A <= count_a_internal;
+    COUNT_B <= count_b_internal;
 
 end Structural;

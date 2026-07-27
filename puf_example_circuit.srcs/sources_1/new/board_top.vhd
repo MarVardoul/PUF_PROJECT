@@ -33,18 +33,66 @@ architecture Structural of ro_puf_board_top is
             VALID      : out STD_LOGIC;
             PAIR_VALID : out STD_LOGIC;
             DELTA      : out STD_LOGIC_VECTOR(24 downto 0);
+            COUNT_A    : out STD_LOGIC_VECTOR(23 downto 0);
+            COUNT_B    : out STD_LOGIC_VECTOR(23 downto 0);
             BUSY       : out STD_LOGIC;
             DONE       : out STD_LOGIC
         );
     end component;
 
-    signal sys_clk_internal   : STD_LOGIC;
-    signal response_internal  : STD_LOGIC;
-    signal valid_internal     : STD_LOGIC;
-    signal pair_valid_internal : STD_LOGIC;
-    signal busy_internal      : STD_LOGIC;
-    signal done_internal      : STD_LOGIC;
-    signal delta_internal     : STD_LOGIC_VECTOR(24 downto 0);
+    component puf_manager is
+        Port (
+            CLK          : in  STD_LOGIC;
+            RST          : in  STD_LOGIC;
+
+            START        : in  STD_LOGIC;
+            SEL_A_IN     : in  STD_LOGIC_VECTOR(3 downto 0);
+            SEL_B_IN     : in  STD_LOGIC_VECTOR(3 downto 0);
+
+            PUF_DONE     : in  STD_LOGIC;
+            PUF_COUNT_A  : in  STD_LOGIC_VECTOR(23 downto 0);
+            PUF_COUNT_B  : in  STD_LOGIC_VECTOR(23 downto 0);
+            PUF_DELTA    : in  STD_LOGIC_VECTOR(24 downto 0);
+            PUF_RESPONSE : in  STD_LOGIC;
+            PUF_VALID    : in  STD_LOGIC;
+
+            PUF_START    : out STD_LOGIC;
+            SEL_A_PUF    : out STD_LOGIC_VECTOR(3 downto 0);
+            SEL_B_PUF    : out STD_LOGIC_VECTOR(3 downto 0);
+
+            BUSY         : out STD_LOGIC;
+            DONE         : out STD_LOGIC;
+
+            COUNT_A_OUT  : out STD_LOGIC_VECTOR(23 downto 0);
+            COUNT_B_OUT  : out STD_LOGIC_VECTOR(23 downto 0);
+            DELTA_OUT    : out STD_LOGIC_VECTOR(24 downto 0);
+            RESPONSE_OUT : out STD_LOGIC;
+            VALID_OUT    : out STD_LOGIC
+        );
+    end component;
+
+    signal sys_clk_internal : STD_LOGIC;
+
+    signal puf_start_internal : STD_LOGIC;
+    signal sel_a_puf_internal : STD_LOGIC_VECTOR(3 downto 0);
+    signal sel_b_puf_internal : STD_LOGIC_VECTOR(3 downto 0);
+
+    signal puf_response_internal   : STD_LOGIC;
+    signal puf_valid_internal      : STD_LOGIC;
+    signal pair_valid_internal     : STD_LOGIC;
+    signal puf_busy_internal       : STD_LOGIC;
+    signal puf_done_internal       : STD_LOGIC;
+    signal puf_delta_internal      : STD_LOGIC_VECTOR(24 downto 0);
+    signal puf_count_a_internal    : STD_LOGIC_VECTOR(23 downto 0);
+    signal puf_count_b_internal    : STD_LOGIC_VECTOR(23 downto 0);
+
+    signal manager_response_internal : STD_LOGIC;
+    signal manager_valid_internal    : STD_LOGIC;
+    signal manager_busy_internal     : STD_LOGIC;
+    signal manager_done_internal     : STD_LOGIC;
+    signal manager_delta_internal    : STD_LOGIC_VECTOR(24 downto 0);
+    signal manager_count_a_internal  : STD_LOGIC_VECTOR(23 downto 0);
+    signal manager_count_b_internal  : STD_LOGIC_VECTOR(23 downto 0);
 
 begin
 
@@ -55,25 +103,57 @@ begin
             O  => sys_clk_internal
         );
 
+    MANAGER_COMP : puf_manager
+        port map (
+            CLK          => sys_clk_internal,
+            RST          => PL_USER_PB(0),
+
+            START        => PL_USER_PB(1),
+            SEL_A_IN     => PL_USER_SW(3 downto 0),
+            SEL_B_IN     => PL_USER_SW(7 downto 4),
+
+            PUF_DONE     => puf_done_internal,
+            PUF_COUNT_A  => puf_count_a_internal,
+            PUF_COUNT_B  => puf_count_b_internal,
+            PUF_DELTA    => puf_delta_internal,
+            PUF_RESPONSE => puf_response_internal,
+            PUF_VALID    => puf_valid_internal,
+
+            PUF_START    => puf_start_internal,
+            SEL_A_PUF    => sel_a_puf_internal,
+            SEL_B_PUF    => sel_b_puf_internal,
+
+            BUSY         => manager_busy_internal,
+            DONE         => manager_done_internal,
+
+            COUNT_A_OUT  => manager_count_a_internal,
+            COUNT_B_OUT  => manager_count_b_internal,
+            DELTA_OUT    => manager_delta_internal,
+            RESPONSE_OUT => manager_response_internal,
+            VALID_OUT    => manager_valid_internal
+        );
+
     PUF_COMP : ro_puf_top
         port map (
             SYS_CLK    => sys_clk_internal,
             RST        => PL_USER_PB(0),
-            START      => PL_USER_PB(1),
-            SEL_A      => PL_USER_SW(3 downto 0),
-            SEL_B      => PL_USER_SW(7 downto 4),
-            RESPONSE   => response_internal,
-            VALID      => valid_internal,
+            START      => puf_start_internal,
+            SEL_A      => sel_a_puf_internal,
+            SEL_B      => sel_b_puf_internal,
+            RESPONSE   => puf_response_internal,
+            VALID      => puf_valid_internal,
             PAIR_VALID => pair_valid_internal,
-            DELTA      => delta_internal,
-            BUSY       => busy_internal,
-            DONE       => done_internal
+            DELTA      => puf_delta_internal,
+            COUNT_A    => puf_count_a_internal,
+            COUNT_B    => puf_count_b_internal,
+            BUSY       => puf_busy_internal,
+            DONE       => puf_done_internal
         );
 
-    PL_USER_LED(0) <= response_internal;
-    PL_USER_LED(1) <= valid_internal;
+    PL_USER_LED(0) <= manager_response_internal;
+    PL_USER_LED(1) <= manager_valid_internal;
     PL_USER_LED(2) <= pair_valid_internal;
-    PL_USER_LED(3) <= busy_internal;
-    PL_USER_LED(4) <= done_internal;
+    PL_USER_LED(3) <= manager_busy_internal;
+    PL_USER_LED(4) <= manager_done_internal;
 
 end Structural;

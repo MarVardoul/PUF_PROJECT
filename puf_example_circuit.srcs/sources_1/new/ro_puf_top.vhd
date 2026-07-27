@@ -18,6 +18,8 @@ entity ro_puf_top is
         VALID      : out STD_LOGIC;
         PAIR_VALID : out STD_LOGIC;
         DELTA      : out STD_LOGIC_VECTOR(24 downto 0);
+        COUNT_A    : out STD_LOGIC_VECTOR(23 downto 0);
+        COUNT_B    : out STD_LOGIC_VECTOR(23 downto 0);
         BUSY       : out STD_LOGIC;
         DONE       : out STD_LOGIC
     );
@@ -56,7 +58,9 @@ architecture Structural of ro_puf_top is
             RESPONSE   : out STD_LOGIC;
             VALID      : out STD_LOGIC;
             PAIR_VALID : out STD_LOGIC;
-            DELTA      : out STD_LOGIC_VECTOR(24 downto 0)
+            DELTA      : out STD_LOGIC_VECTOR(24 downto 0);
+            COUNT_A    : out STD_LOGIC_VECTOR(23 downto 0);
+            COUNT_B    : out STD_LOGIC_VECTOR(23 downto 0)
         );
     end component;
 
@@ -69,10 +73,14 @@ architecture Structural of ro_puf_top is
     signal valid_internal      : STD_LOGIC;
     signal pair_valid_internal : STD_LOGIC;
     signal delta_internal      : STD_LOGIC_VECTOR(24 downto 0);
+    signal count_a_internal    : STD_LOGIC_VECTOR(23 downto 0);
+    signal count_b_internal    : STD_LOGIC_VECTOR(23 downto 0);
 
     signal response_reg : STD_LOGIC := '0';
     signal valid_reg    : STD_LOGIC := '0';
     signal delta_reg    : STD_LOGIC_VECTOR(24 downto 0) := (others => '0');
+    signal count_a_reg  : STD_LOGIC_VECTOR(23 downto 0) := (others => '0');
+    signal count_b_reg  : STD_LOGIC_VECTOR(23 downto 0) := (others => '0');
 
 begin
 
@@ -106,7 +114,9 @@ begin
             RESPONSE   => response_internal,
             VALID      => valid_internal,
             PAIR_VALID => pair_valid_internal,
-            DELTA      => delta_internal
+            DELTA      => delta_internal,
+            COUNT_A    => count_a_internal,
+            COUNT_B    => count_b_internal
         );
 
     result_register : process(SYS_CLK, RST)
@@ -115,12 +125,16 @@ begin
             response_reg <= '0';
             valid_reg    <= '0';
             delta_reg    <= (others => '0');
+            count_a_reg  <= (others => '0');
+            count_b_reg  <= (others => '0');
 
         elsif rising_edge(SYS_CLK) then
             if capture_internal = '1' then
                 response_reg <= response_internal;
                 valid_reg    <= valid_internal;
                 delta_reg    <= delta_internal;
+                count_a_reg  <= count_a_internal;
+                count_b_reg  <= count_b_internal;
             end if;
         end if;
     end process;
@@ -128,6 +142,8 @@ begin
     RESPONSE   <= response_reg;
     VALID      <= valid_reg;
     DELTA      <= delta_reg;
+    COUNT_A    <= count_a_reg;
+    COUNT_B    <= count_b_reg;
     PAIR_VALID <= pair_valid_internal;
 
 end Structural;
