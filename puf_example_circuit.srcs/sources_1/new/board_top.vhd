@@ -16,6 +16,29 @@ end ro_puf_board_top;
 
 architecture Structural of ro_puf_board_top is
 
+    component puf_signature_generator is
+        Port (
+            CLK   : in  STD_LOGIC;
+            RST   : in  STD_LOGIC;
+            START : in  STD_LOGIC;
+
+            MANAGER_DONE     : in  STD_LOGIC;
+            MANAGER_RESPONSE : in  STD_LOGIC;
+            MANAGER_VALID    : in  STD_LOGIC;
+
+            MANAGER_START : out STD_LOGIC;
+            SEL_A         : out STD_LOGIC_VECTOR(3 downto 0);
+            SEL_B         : out STD_LOGIC_VECTOR(3 downto 0);
+
+            SIGNATURE  : out STD_LOGIC_VECTOR(119 downto 0);
+            VALID_MASK : out STD_LOGIC_VECTOR(119 downto 0);
+
+            BUSY            : out STD_LOGIC;
+            DONE            : out STD_LOGIC;
+            SIGNATURE_READY : out STD_LOGIC
+        );
+    end component;
+
     component ro_puf_top is
         generic (
             RESET_CYCLES   : positive := 4;
@@ -93,6 +116,24 @@ architecture Structural of ro_puf_board_top is
     signal manager_delta_internal    : STD_LOGIC_VECTOR(24 downto 0);
     signal manager_count_a_internal  : STD_LOGIC_VECTOR(23 downto 0);
     signal manager_count_b_internal  : STD_LOGIC_VECTOR(23 downto 0);
+    
+    signal signature_manager_start : STD_LOGIC;
+    signal signature_sel_a         : STD_LOGIC_VECTOR(3 downto 0);
+    signal signature_sel_b         : STD_LOGIC_VECTOR(3 downto 0);
+
+    signal signature_internal      : STD_LOGIC_VECTOR(119 downto 0);
+    signal signature_valid_mask    : STD_LOGIC_VECTOR(119 downto 0);
+
+    signal signature_busy_internal  : STD_LOGIC;
+    signal signature_done_internal  : STD_LOGIC;
+    signal signature_ready_internal : STD_LOGIC;
+    
+    attribute MARK_DEBUG : string;
+
+    attribute MARK_DEBUG of signature_internal   : signal is "TRUE";
+    attribute MARK_DEBUG of signature_valid_mask : signal is "TRUE";
+    attribute MARK_DEBUG of signature_busy_internal  : signal is "TRUE";
+    attribute MARK_DEBUG of signature_ready_internal : signal is "TRUE";
 
 begin
 
@@ -108,10 +149,10 @@ begin
             CLK          => sys_clk_internal,
             RST          => PL_USER_PB(0),
 
-            START        => PL_USER_PB(1),
-            SEL_A_IN     => PL_USER_SW(3 downto 0),
-            SEL_B_IN     => PL_USER_SW(7 downto 4),
-
+            START    => signature_manager_start,
+            SEL_A_IN => signature_sel_a,
+            SEL_B_IN => signature_sel_b,
+            
             PUF_DONE     => puf_done_internal,
             PUF_COUNT_A  => puf_count_a_internal,
             PUF_COUNT_B  => puf_count_b_internal,
@@ -132,7 +173,29 @@ begin
             RESPONSE_OUT => manager_response_internal,
             VALID_OUT    => manager_valid_internal
         );
+        
+            SIGNATURE_GEN_COMP : puf_signature_generator
+        port map (
+            CLK   => sys_clk_internal,
+            RST   => PL_USER_PB(0),
+            START => PL_USER_PB(1),
 
+            MANAGER_DONE     => manager_done_internal,
+            MANAGER_RESPONSE => manager_response_internal,
+            MANAGER_VALID    => manager_valid_internal,
+
+            MANAGER_START => signature_manager_start,
+            SEL_A         => signature_sel_a,
+            SEL_B         => signature_sel_b,
+
+            SIGNATURE  => signature_internal,
+            VALID_MASK => signature_valid_mask,
+
+            BUSY            => signature_busy_internal,
+            DONE            => signature_done_internal,
+            SIGNATURE_READY => signature_ready_internal
+        );
+        
     PUF_COMP : ro_puf_top
         port map (
             SYS_CLK    => sys_clk_internal,
@@ -153,7 +216,6 @@ begin
     PL_USER_LED(0) <= manager_response_internal;
     PL_USER_LED(1) <= manager_valid_internal;
     PL_USER_LED(2) <= pair_valid_internal;
-    PL_USER_LED(3) <= manager_busy_internal;
-    PL_USER_LED(4) <= manager_done_internal;
-
+    PL_USER_LED(3) <= signature_busy_internal;
+    PL_USER_LED(4) <= signature_ready_internal;
 end Structural;
