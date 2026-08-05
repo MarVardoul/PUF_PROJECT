@@ -1,0 +1,2 @@
+capture,source_file,signature,valid_mask,valid_mask_all_ones,hamming_distance_from_first
+1,capture_001.csv,3DBBD30FFEB001D6584BFFFFFF3494,FFFBFFFFFFFFFFFFFFFFFFFFFFFFFF,False,0

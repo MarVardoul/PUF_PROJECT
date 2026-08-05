@@ -1,0 +1,11 @@
+Capture count: 1000
+All-valid captures: 270 (27.000000%)
+Unique signatures: 19
+Modal signature: 3DBBD30FFEB001D6584BFFFFFF3494
+Modal occurrences: 424 (42.400000%)
+Hamming distance from mode, minimum: 0
+Hamming distance from mode, mean: 0.88
+Hamming distance from mode, maximum: 4
+Stable and always-valid bits: 114
+Bits with invalid results: [78, 80, 88, 96, 106, 117]
+Bits with valid flips: [78, 80, 96, 106, 117]

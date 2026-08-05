@@ -13,3 +13,18 @@
 *.wdb
 *.pb
 *.dcp
+
+# Vivado temporary and generated files
+**/.Xil/
+**/*.jou
+**/*.log
+**/*.str
+**/*.backup.*
+**/*.tmp
+**/*.wdb
+**/*.vcd
+**/*.cache/
+**/*.gen/
+**/*.hw/
+**/*.ip_user_files/
+**/*.runs/
