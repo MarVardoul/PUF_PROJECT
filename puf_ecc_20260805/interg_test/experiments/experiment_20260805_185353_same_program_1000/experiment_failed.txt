@@ -1,2 +1,0 @@
-2026-08-05T18:54:10.958594+03:00
-RuntimeError: Vivado failed with exit code 1. See /home/marvardoul/interg_test/experiments/experiment_20260805_185353_same_program_1000/vivado_capture.log
