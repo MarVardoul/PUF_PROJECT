@@ -5,7 +5,6 @@ use ieee.numeric_std.all;
 library work;
 use work.parameters.all;
 
-
 entity puf_ecc_reconstruction is
     port (
         clk   : in std_logic;
@@ -31,10 +30,13 @@ entity puf_ecc_reconstruction is
         error_position_0 : out unsigned(6 downto 0);
         error_position_1 : out unsigned(6 downto 0);
         error_position_2 : out unsigned(6 downto 0);
+        error_position_3 : out unsigned(6 downto 0);
+        error_position_4 : out unsigned(6 downto 0);
+        error_position_5 : out unsigned(6 downto 0);
+        error_position_6 : out unsigned(6 downto 0);
 
-        decoder_state_debug : out unsigned(3 downto 0);
-        cycle_count_debug   : out unsigned(9 downto 0);
-
+        decoder_state_debug  : out unsigned(3 downto 0);
+        cycle_count_debug    : out unsigned(9 downto 0);
         chien_position_debug : out unsigned(6 downto 0);
         chien_cycle_debug    : out unsigned(7 downto 0)
     );
@@ -76,6 +78,18 @@ architecture rtl of puf_ecc_reconstruction is
     signal error_position_2_int :
         unsigned(6 downto 0) := (others => '0');
 
+    signal error_position_3_int :
+        unsigned(6 downto 0) := (others => '0');
+
+    signal error_position_4_int :
+        unsigned(6 downto 0) := (others => '0');
+
+    signal error_position_5_int :
+        unsigned(6 downto 0) := (others => '0');
+
+    signal error_position_6_int :
+        unsigned(6 downto 0) := (others => '0');
+
     signal decoder_state_debug_int :
         unsigned(3 downto 0) := (others => '0');
 
@@ -93,12 +107,12 @@ begin
     noisy_codeword <= noisy_codeword_int;
 
     corrected_codeword <= corrected_codeword_int;
-    decoded_secret     <= decoded_secret_int;
+    decoded_secret <= decoded_secret_int;
 
     busy <= busy_int;
     done <= done_int;
 
-    decoder_success     <= decoder_success_int;
+    decoder_success <= decoder_success_int;
     post_syndromes_zero <= post_syndromes_zero_int;
 
     error_count <= error_count_int;
@@ -106,12 +120,15 @@ begin
     error_position_0 <= error_position_0_int;
     error_position_1 <= error_position_1_int;
     error_position_2 <= error_position_2_int;
+    error_position_3 <= error_position_3_int;
+    error_position_4 <= error_position_4_int;
+    error_position_5 <= error_position_5_int;
+    error_position_6 <= error_position_6_int;
 
     decoder_state_debug <= decoder_state_debug_int;
-    cycle_count_debug   <= cycle_count_debug_int;
-
+    cycle_count_debug <= cycle_count_debug_int;
     chien_position_debug <= chien_position_debug_int;
-    chien_cycle_debug    <= chien_cycle_debug_int;
+    chien_cycle_debug <= chien_cycle_debug_int;
 
 
     u_hd_xor :
@@ -162,6 +179,18 @@ begin
 
             error_position_2 =>
                 error_position_2_int,
+
+            error_position_3 =>
+                error_position_3_int,
+
+            error_position_4 =>
+                error_position_4_int,
+
+            error_position_5 =>
+                error_position_5_int,
+
+            error_position_6 =>
+                error_position_6_int,
 
             decoder_state_debug =>
                 decoder_state_debug_int,

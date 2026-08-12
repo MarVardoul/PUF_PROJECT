@@ -6,7 +6,6 @@ library work;
 use work.parameters.all;
 use work.gf128_pkg.all;
 
-
 entity bch_decoder is
     port (
         clk : in std_logic;
@@ -22,20 +21,7 @@ entity bch_decoder is
         busy : out std_logic;
         done : out std_logic;
 
-        ----------------------------------------------------------------
-        -- Algebraic decoder status.
-        --
-        -- This becomes high when:
-        --
-        --   1. Chien search was successful;
-        --   2. correction was accepted;
-        --   3. the corrected codeword has zero syndromes.
-        --
-        -- This does not detect a valid-codeword miscorrection.
-        -- A later verification hash is still required.
-        ----------------------------------------------------------------
-        decoder_success : out std_logic;
-
+        decoder_success     : out std_logic;
         post_syndromes_zero : out std_logic;
 
         error_count : out unsigned(2 downto 0);
@@ -43,64 +29,41 @@ entity bch_decoder is
         error_position_0 : out unsigned(6 downto 0);
         error_position_1 : out unsigned(6 downto 0);
         error_position_2 : out unsigned(6 downto 0);
+        error_position_3 : out unsigned(6 downto 0);
+        error_position_4 : out unsigned(6 downto 0);
+        error_position_5 : out unsigned(6 downto 0);
+        error_position_6 : out unsigned(6 downto 0);
 
-        ----------------------------------------------------------------
-        -- Debug outputs for simulation or temporary ILA connection
-        ----------------------------------------------------------------
         decoder_state_debug : out unsigned(3 downto 0);
         cycle_count_debug   : out unsigned(9 downto 0);
 
-        chien_position_debug :
-            out unsigned(6 downto 0);
-
-        chien_cycle_debug :
-            out unsigned(7 downto 0)
+        chien_position_debug : out unsigned(6 downto 0);
+        chien_cycle_debug    : out unsigned(7 downto 0)
     );
 end entity bch_decoder;
 
 
 architecture rtl of bch_decoder is
 
-    --------------------------------------------------------------------
-    -- Decoder controller states
-    --------------------------------------------------------------------
     type t_decoder_state is (
         IDLE,
-
         LAUNCH_PRE_SYNDROME,
         WAIT_PRE_SYNDROME,
-
         LAUNCH_LOCATOR,
         WAIT_LOCATOR,
-
         LAUNCH_CHIEN,
         WAIT_CHIEN,
-
         LAUNCH_CORRECTOR,
         WAIT_CORRECTOR,
-
         LAUNCH_POST_SYNDROME,
         WAIT_POST_SYNDROME
     );
 
     signal state_reg : t_decoder_state := IDLE;
 
-
-    --------------------------------------------------------------------
-    -- Captured decoder input
-    --------------------------------------------------------------------
     signal received_codeword_reg :
         t_shortened_codeword := (others => '0');
 
-
-    --------------------------------------------------------------------
-    -- Syndrome calculator signals
-    --
-    -- The same syndrome calculator is reused:
-    --
-    --   first for the received word;
-    --   then for the corrected word.
-    --------------------------------------------------------------------
     signal syndrome_start_reg : std_logic := '0';
 
     signal syndrome_codeword_reg :
@@ -109,19 +72,23 @@ architecture rtl of bch_decoder is
     signal syndrome_busy_int : std_logic;
     signal syndrome_done_int : std_logic;
 
-    signal syndrome_1_int : t_gf128;
-    signal syndrome_2_int : t_gf128;
-    signal syndrome_3_int : t_gf128;
-    signal syndrome_4_int : t_gf128;
-    signal syndrome_5_int : t_gf128;
-    signal syndrome_6_int : t_gf128;
+    signal syndrome_1_int  : t_gf128;
+    signal syndrome_2_int  : t_gf128;
+    signal syndrome_3_int  : t_gf128;
+    signal syndrome_4_int  : t_gf128;
+    signal syndrome_5_int  : t_gf128;
+    signal syndrome_6_int  : t_gf128;
+    signal syndrome_7_int  : t_gf128;
+    signal syndrome_8_int  : t_gf128;
+    signal syndrome_9_int  : t_gf128;
+    signal syndrome_10_int : t_gf128;
+    signal syndrome_11_int : t_gf128;
+    signal syndrome_12_int : t_gf128;
+    signal syndrome_13_int : t_gf128;
+    signal syndrome_14_int : t_gf128;
 
     signal syndromes_zero_int : std_logic;
 
-
-    --------------------------------------------------------------------
-    -- Error-locator signals
-    --------------------------------------------------------------------
     signal locator_start_reg : std_logic := '0';
 
     signal locator_busy_int : std_logic;
@@ -131,17 +98,17 @@ architecture rtl of bch_decoder is
     signal locator_1_int : t_gf128;
     signal locator_2_int : t_gf128;
     signal locator_3_int : t_gf128;
+    signal locator_4_int : t_gf128;
+    signal locator_5_int : t_gf128;
+    signal locator_6_int : t_gf128;
+    signal locator_7_int : t_gf128;
 
     signal locator_degree_int :
-        unsigned(2 downto 0);
+        unsigned(3 downto 0);
 
     signal locator_valid_int :
         std_logic;
 
-
-    --------------------------------------------------------------------
-    -- Chien-search signals
-    --------------------------------------------------------------------
     signal chien_start_reg : std_logic := '0';
 
     signal chien_busy_int : std_logic;
@@ -154,6 +121,18 @@ architecture rtl of bch_decoder is
         unsigned(6 downto 0);
 
     signal chien_error_position_2_int :
+        unsigned(6 downto 0);
+
+    signal chien_error_position_3_int :
+        unsigned(6 downto 0);
+
+    signal chien_error_position_4_int :
+        unsigned(6 downto 0);
+
+    signal chien_error_position_5_int :
+        unsigned(6 downto 0);
+
+    signal chien_error_position_6_int :
         unsigned(6 downto 0);
 
     signal chien_error_count_int :
@@ -174,10 +153,6 @@ architecture rtl of bch_decoder is
     signal chien_cycle_count_int :
         unsigned(7 downto 0);
 
-
-    --------------------------------------------------------------------
-    -- Error-corrector signals
-    --------------------------------------------------------------------
     signal corrector_start_reg : std_logic := '0';
 
     signal corrector_busy_int : std_logic;
@@ -192,10 +167,6 @@ architecture rtl of bch_decoder is
     signal corrector_success_int :
         std_logic;
 
-
-    --------------------------------------------------------------------
-    -- Final decoder result registers
-    --------------------------------------------------------------------
     signal corrected_codeword_reg :
         t_shortened_codeword := (others => '0');
 
@@ -211,10 +182,6 @@ architecture rtl of bch_decoder is
     signal decoder_success_reg :
         std_logic := '0';
 
-
-    --------------------------------------------------------------------
-    -- Captured error information
-    --------------------------------------------------------------------
     signal error_count_reg :
         unsigned(2 downto 0) := (others => '0');
 
@@ -227,10 +194,18 @@ architecture rtl of bch_decoder is
     signal error_position_2_reg :
         unsigned(6 downto 0) := (others => '0');
 
+    signal error_position_3_reg :
+        unsigned(6 downto 0) := (others => '0');
 
-    --------------------------------------------------------------------
-    -- Controller status
-    --------------------------------------------------------------------
+    signal error_position_4_reg :
+        unsigned(6 downto 0) := (others => '0');
+
+    signal error_position_5_reg :
+        unsigned(6 downto 0) := (others => '0');
+
+    signal error_position_6_reg :
+        unsigned(6 downto 0) := (others => '0');
+
     signal busy_reg : std_logic := '0';
     signal done_reg : std_logic := '0';
 
@@ -239,28 +214,30 @@ architecture rtl of bch_decoder is
 
 begin
 
-    --------------------------------------------------------------------
-    -- Top-level outputs
-    --------------------------------------------------------------------
     corrected_codeword <= corrected_codeword_reg;
-    decoded_secret     <= decoded_secret_reg;
+    decoded_secret <= decoded_secret_reg;
 
     busy <= busy_reg;
     done <= done_reg;
 
-    decoder_success      <= decoder_success_reg;
-    post_syndromes_zero  <= post_syndromes_zero_reg;
+    decoder_success <= decoder_success_reg;
+    post_syndromes_zero <= post_syndromes_zero_reg;
 
     error_count <= error_count_reg;
 
     error_position_0 <= error_position_0_reg;
     error_position_1 <= error_position_1_reg;
     error_position_2 <= error_position_2_reg;
+    error_position_3 <= error_position_3_reg;
+    error_position_4 <= error_position_4_reg;
+    error_position_5 <= error_position_5_reg;
+    error_position_6 <= error_position_6_reg;
 
-    cycle_count_debug <= to_unsigned(
-        cycle_count_reg,
-        cycle_count_debug'length
-    );
+    cycle_count_debug <=
+        to_unsigned(
+            cycle_count_reg,
+            cycle_count_debug'length
+        );
 
     chien_position_debug <=
         chien_current_position_int;
@@ -268,33 +245,20 @@ begin
     chien_cycle_debug <=
         chien_cycle_count_int;
 
-
-    --------------------------------------------------------------------
-    -- State debugging values
-    --------------------------------------------------------------------
     with state_reg select
         decoder_state_debug <=
             "0000" when IDLE,
-
             "0001" when LAUNCH_PRE_SYNDROME,
             "0010" when WAIT_PRE_SYNDROME,
-
             "0011" when LAUNCH_LOCATOR,
             "0100" when WAIT_LOCATOR,
-
             "0101" when LAUNCH_CHIEN,
             "0110" when WAIT_CHIEN,
-
             "0111" when LAUNCH_CORRECTOR,
             "1000" when WAIT_CORRECTOR,
-
             "1001" when LAUNCH_POST_SYNDROME,
             "1010" when WAIT_POST_SYNDROME;
 
-
-    --------------------------------------------------------------------
-    -- Syndrome calculator
-    --------------------------------------------------------------------
     u_syndrome_calculator :
         entity work.bch_syndrome_calculator
         port map (
@@ -309,21 +273,25 @@ begin
             busy => syndrome_busy_int,
             done => syndrome_done_int,
 
-            syndrome_1 => syndrome_1_int,
-            syndrome_2 => syndrome_2_int,
-            syndrome_3 => syndrome_3_int,
-            syndrome_4 => syndrome_4_int,
-            syndrome_5 => syndrome_5_int,
-            syndrome_6 => syndrome_6_int,
+            syndrome_1  => syndrome_1_int,
+            syndrome_2  => syndrome_2_int,
+            syndrome_3  => syndrome_3_int,
+            syndrome_4  => syndrome_4_int,
+            syndrome_5  => syndrome_5_int,
+            syndrome_6  => syndrome_6_int,
+            syndrome_7  => syndrome_7_int,
+            syndrome_8  => syndrome_8_int,
+            syndrome_9  => syndrome_9_int,
+            syndrome_10 => syndrome_10_int,
+            syndrome_11 => syndrome_11_int,
+            syndrome_12 => syndrome_12_int,
+            syndrome_13 => syndrome_13_int,
+            syndrome_14 => syndrome_14_int,
 
             syndromes_zero =>
                 syndromes_zero_int
         );
 
-
-    --------------------------------------------------------------------
-    -- Berlekamp-Massey error-locator block
-    --------------------------------------------------------------------
     u_error_locator :
         entity work.bch_error_locator
         port map (
@@ -332,12 +300,20 @@ begin
 
             start => locator_start_reg,
 
-            syndrome_1 => syndrome_1_int,
-            syndrome_2 => syndrome_2_int,
-            syndrome_3 => syndrome_3_int,
-            syndrome_4 => syndrome_4_int,
-            syndrome_5 => syndrome_5_int,
-            syndrome_6 => syndrome_6_int,
+            syndrome_1  => syndrome_1_int,
+            syndrome_2  => syndrome_2_int,
+            syndrome_3  => syndrome_3_int,
+            syndrome_4  => syndrome_4_int,
+            syndrome_5  => syndrome_5_int,
+            syndrome_6  => syndrome_6_int,
+            syndrome_7  => syndrome_7_int,
+            syndrome_8  => syndrome_8_int,
+            syndrome_9  => syndrome_9_int,
+            syndrome_10 => syndrome_10_int,
+            syndrome_11 => syndrome_11_int,
+            syndrome_12 => syndrome_12_int,
+            syndrome_13 => syndrome_13_int,
+            syndrome_14 => syndrome_14_int,
 
             busy => locator_busy_int,
             done => locator_done_int,
@@ -346,6 +322,10 @@ begin
             locator_1 => locator_1_int,
             locator_2 => locator_2_int,
             locator_3 => locator_3_int,
+            locator_4 => locator_4_int,
+            locator_5 => locator_5_int,
+            locator_6 => locator_6_int,
+            locator_7 => locator_7_int,
 
             locator_degree =>
                 locator_degree_int,
@@ -354,10 +334,6 @@ begin
                 locator_valid_int
         );
 
-
-    --------------------------------------------------------------------
-    -- Chien search
-    --------------------------------------------------------------------
     u_chien_search :
         entity work.bch_chien_search
         port map (
@@ -370,6 +346,10 @@ begin
             locator_1 => locator_1_int,
             locator_2 => locator_2_int,
             locator_3 => locator_3_int,
+            locator_4 => locator_4_int,
+            locator_5 => locator_5_int,
+            locator_6 => locator_6_int,
+            locator_7 => locator_7_int,
 
             locator_degree =>
                 locator_degree_int,
@@ -385,6 +365,18 @@ begin
 
             error_position_2 =>
                 chien_error_position_2_int,
+
+            error_position_3 =>
+                chien_error_position_3_int,
+
+            error_position_4 =>
+                chien_error_position_4_int,
+
+            error_position_5 =>
+                chien_error_position_5_int,
+
+            error_position_6 =>
+                chien_error_position_6_int,
 
             error_count =>
                 chien_error_count_int,
@@ -405,10 +397,6 @@ begin
                 chien_cycle_count_int
         );
 
-
-    --------------------------------------------------------------------
-    -- Error corrector and secret extractor
-    --------------------------------------------------------------------
     u_error_corrector :
         entity work.bch_error_corrector
         port map (
@@ -429,6 +417,18 @@ begin
             error_position_2 =>
                 chien_error_position_2_int,
 
+            error_position_3 =>
+                chien_error_position_3_int,
+
+            error_position_4 =>
+                chien_error_position_4_int,
+
+            error_position_5 =>
+                chien_error_position_5_int,
+
+            error_position_6 =>
+                chien_error_position_6_int,
+
             error_count =>
                 chien_error_count_int,
 
@@ -448,25 +448,17 @@ begin
                 corrector_success_int
         );
 
-
-    --------------------------------------------------------------------
-    -- Decoder controller
-    --------------------------------------------------------------------
     process (clk)
     begin
 
         if rising_edge(clk) then
 
-            ------------------------------------------------------------
-            -- These signals are one-clock pulses.
-            ------------------------------------------------------------
-            syndrome_start_reg  <= '0';
-            locator_start_reg   <= '0';
-            chien_start_reg     <= '0';
+            syndrome_start_reg <= '0';
+            locator_start_reg <= '0';
+            chien_start_reg <= '0';
             corrector_start_reg <= '0';
 
             done_reg <= '0';
-
 
             if rst = '1' then
 
@@ -484,10 +476,14 @@ begin
                 decoded_secret_reg <=
                     (others => '0');
 
-                correction_success_latched_reg <= '0';
+                correction_success_latched_reg <=
+                    '0';
 
-                post_syndromes_zero_reg <= '0';
-                decoder_success_reg     <= '0';
+                post_syndromes_zero_reg <=
+                    '0';
+
+                decoder_success_reg <=
+                    '0';
 
                 error_count_reg <=
                     (others => '0');
@@ -501,6 +497,18 @@ begin
                 error_position_2_reg <=
                     (others => '0');
 
+                error_position_3_reg <=
+                    (others => '0');
+
+                error_position_4_reg <=
+                    (others => '0');
+
+                error_position_5_reg <=
+                    (others => '0');
+
+                error_position_6_reg <=
+                    (others => '0');
+
                 busy_reg <= '0';
                 done_reg <= '0';
 
@@ -508,9 +516,6 @@ begin
 
             else
 
-                --------------------------------------------------------
-                -- Overall decoder cycle counter
-                --------------------------------------------------------
                 if busy_reg = '1' then
 
                     if cycle_count_reg < 1023 then
@@ -520,12 +525,8 @@ begin
 
                 end if;
 
-
                 case state_reg is
 
-                    ----------------------------------------------------
-                    -- Wait for a new decoder request
-                    ----------------------------------------------------
                     when IDLE =>
 
                         busy_reg <= '0';
@@ -544,8 +545,11 @@ begin
                             correction_success_latched_reg <=
                                 '0';
 
-                            post_syndromes_zero_reg <= '0';
-                            decoder_success_reg     <= '0';
+                            post_syndromes_zero_reg <=
+                                '0';
+
+                            decoder_success_reg <=
+                                '0';
 
                             error_count_reg <=
                                 (others => '0');
@@ -559,8 +563,20 @@ begin
                             error_position_2_reg <=
                                 (others => '0');
 
+                            error_position_3_reg <=
+                                (others => '0');
+
+                            error_position_4_reg <=
+                                (others => '0');
+
+                            error_position_5_reg <=
+                                (others => '0');
+
+                            error_position_6_reg <=
+                                (others => '0');
+
                             cycle_count_reg <= 0;
-                            busy_reg        <= '1';
+                            busy_reg <= '1';
 
                             state_reg <=
                                 LAUNCH_PRE_SYNDROME;
@@ -568,9 +584,6 @@ begin
                         end if;
 
 
-                    ----------------------------------------------------
-                    -- Start the first syndrome calculation
-                    ----------------------------------------------------
                     when LAUNCH_PRE_SYNDROME =>
 
                         syndrome_codeword_reg <=
@@ -582,9 +595,6 @@ begin
                             WAIT_PRE_SYNDROME;
 
 
-                    ----------------------------------------------------
-                    -- Wait for received-word syndromes
-                    ----------------------------------------------------
                     when WAIT_PRE_SYNDROME =>
 
                         if syndrome_done_int = '1' then
@@ -595,9 +605,6 @@ begin
                         end if;
 
 
-                    ----------------------------------------------------
-                    -- Start Berlekamp-Massey
-                    ----------------------------------------------------
                     when LAUNCH_LOCATOR =>
 
                         locator_start_reg <= '1';
@@ -606,9 +613,6 @@ begin
                             WAIT_LOCATOR;
 
 
-                    ----------------------------------------------------
-                    -- Wait for locator polynomial
-                    ----------------------------------------------------
                     when WAIT_LOCATOR =>
 
                         if locator_done_int = '1' then
@@ -619,9 +623,6 @@ begin
                         end if;
 
 
-                    ----------------------------------------------------
-                    -- Start Chien search
-                    ----------------------------------------------------
                     when LAUNCH_CHIEN =>
 
                         chien_start_reg <= '1';
@@ -630,9 +631,6 @@ begin
                             WAIT_CHIEN;
 
 
-                    ----------------------------------------------------
-                    -- Wait for error positions
-                    ----------------------------------------------------
                     when WAIT_CHIEN =>
 
                         if chien_done_int = '1' then
@@ -649,15 +647,24 @@ begin
                             error_position_2_reg <=
                                 chien_error_position_2_int;
 
+                            error_position_3_reg <=
+                                chien_error_position_3_int;
+
+                            error_position_4_reg <=
+                                chien_error_position_4_int;
+
+                            error_position_5_reg <=
+                                chien_error_position_5_int;
+
+                            error_position_6_reg <=
+                                chien_error_position_6_int;
+
                             state_reg <=
                                 LAUNCH_CORRECTOR;
 
                         end if;
 
 
-                    ----------------------------------------------------
-                    -- Start codeword correction
-                    ----------------------------------------------------
                     when LAUNCH_CORRECTOR =>
 
                         corrector_start_reg <= '1';
@@ -666,9 +673,6 @@ begin
                             WAIT_CORRECTOR;
 
 
-                    ----------------------------------------------------
-                    -- Wait for corrected word and secret
-                    ----------------------------------------------------
                     when WAIT_CORRECTOR =>
 
                         if corrector_done_int = '1' then
@@ -688,9 +692,6 @@ begin
                         end if;
 
 
-                    ----------------------------------------------------
-                    -- Start syndrome calculation on corrected word
-                    ----------------------------------------------------
                     when LAUNCH_POST_SYNDROME =>
 
                         syndrome_codeword_reg <=
@@ -702,9 +703,6 @@ begin
                             WAIT_POST_SYNDROME;
 
 
-                    ----------------------------------------------------
-                    -- Verify corrected word algebraically
-                    ----------------------------------------------------
                     when WAIT_POST_SYNDROME =>
 
                         if syndrome_done_int = '1' then
@@ -717,9 +715,13 @@ begin
                                 and
                                 syndromes_zero_int = '1'
                             then
+
                                 decoder_success_reg <= '1';
+
                             else
+
                                 decoder_success_reg <= '0';
+
                             end if;
 
                             busy_reg <= '0';

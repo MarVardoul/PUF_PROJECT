@@ -29,6 +29,13 @@ architecture Structural of ro_puf_board_top is
             probe_out0 : out std_logic_vector(0 downto 0)
         );
     end component;
+    
+    component vio_0 is 
+        port (
+        clk: in std_logic;
+        probe_out0: out std_logic_vector(119 downto 0)
+        );
+    end component;
 
 
     component puf_signature_generator is
@@ -115,13 +122,13 @@ architecture Structural of ro_puf_board_top is
     type integration_state_type is (
         WAIT_FOR_SIGNATURE,
         START_ECC,
-        WAIT_FOR_ECC
+        WAIT_FOR_ECC,
+        START_SHA,
+        WAIT_FOR_SHA
     );
 
-
-    constant C_HELPER_DATA :
-        t_helper_data :=
-        x"D465D685CB52F081E2543530F1DDFC";
+signal helper_data_vio :
+    t_helper_data := (others => '0');
 
 
     signal sys_clk_internal :
@@ -280,6 +287,17 @@ architecture Structural of ro_puf_board_top is
     signal ecc_chien_cycle_debug_internal :
         unsigned(7 downto 0) := (others => '0');
 
+signal sha_start_internal :
+    std_logic := '0';
+
+signal sha_busy_internal :
+    std_logic := '0';
+
+signal sha_done_internal :
+    std_logic := '0';
+
+signal sha_digest_internal :
+    std_logic_vector(255 downto 0) := (others => '0');
 
     attribute MARK_DEBUG : string;
 
@@ -333,6 +351,18 @@ architecture Structural of ro_puf_board_top is
 
     attribute MARK_DEBUG of ecc_error_position_2_internal :
         signal is "TRUE";
+        
+    attribute MARK_DEBUG of sha_start_internal :
+    signal is "true";
+    
+    attribute MARK_DEBUG of sha_busy_internal :
+        signal is "true";
+    
+    attribute MARK_DEBUG of sha_done_internal :
+        signal is "true";
+    
+    attribute MARK_DEBUG of sha_digest_internal :
+        signal is "true";
 
 
 begin
@@ -363,6 +393,14 @@ begin
             clk        => sys_clk_internal,
             probe_out0 => vio_start
         );
+       
+    VIO_HELPER_COMP :
+    vio_0
+    port map (
+        clk        => sys_clk_internal,
+        probe_out0 => helper_data_vio
+    );
+
 
 
     MANAGER_COMP :
@@ -452,7 +490,7 @@ begin
                 puf_response_latched,
 
             helper_data =>
-                C_HELPER_DATA,
+                helper_data_vio,
 
             noisy_codeword =>
                 ecc_noisy_codeword_internal,
@@ -499,6 +537,18 @@ begin
             chien_cycle_debug =>
                 ecc_chien_cycle_debug_internal
         );
+        
+        SHA_COMP :
+    entity work.sha256_72bit
+    port map (
+        clk       => sys_clk_internal,
+        rst       => PL_USER_PB(0),
+        start     => sha_start_internal,
+        secret_in => ecc_decoded_secret_internal,
+        digest    => sha_digest_internal,
+        busy      => sha_busy_internal,
+        done      => sha_done_internal
+    );
 
 
     INTEGRATION_CONTROLLER :
@@ -524,6 +574,8 @@ begin
 
                     ecc_start_internal <=
                         '0';
+                    sha_start_internal <=
+                         '0';
 
                     case integration_state is
 
@@ -558,18 +610,50 @@ begin
 
                         when WAIT_FOR_ECC =>
 
+                            
                             if ecc_done_internal = '1' then
-
+                        
                                 ecc_success_latched <=
                                     ecc_decoder_success_internal
                                     and
                                     ecc_post_syndromes_zero_internal;
-
-                                integration_state <=
-                                    WAIT_FOR_SIGNATURE;
-
+                        
+                                if (ecc_decoder_success_internal = '1') and
+                                   (ecc_post_syndromes_zero_internal = '1') then
+                        
+                                    integration_state <=
+                                        START_SHA;
+                        
+                                else
+                        
+                                    integration_state <=
+                                        WAIT_FOR_SIGNATURE;
+                        
+                                end if;
+                        
                             end if;
+                            
+                            when START_SHA =>
 
+                                    if sha_busy_internal = '0' then
+                                
+                                        sha_start_internal <=
+                                            '1';
+                                
+                                        integration_state <=
+                                            WAIT_FOR_SHA;
+                                
+                                    end if;
+                                    
+                                    when WAIT_FOR_SHA =>
+
+                                        if sha_done_internal = '1' then
+                                    
+                                            integration_state <=
+                                                WAIT_FOR_SIGNATURE;
+                                    
+                                        end if;
+                                
 
                         when others =>
 

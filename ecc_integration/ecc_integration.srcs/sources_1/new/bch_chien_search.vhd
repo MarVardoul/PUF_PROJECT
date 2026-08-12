@@ -6,7 +6,6 @@ library work;
 use work.parameters.all;
 use work.gf128_pkg.all;
 
-
 entity bch_chien_search is
     port (
         clk : in std_logic;
@@ -18,8 +17,12 @@ entity bch_chien_search is
         locator_1 : in t_gf128;
         locator_2 : in t_gf128;
         locator_3 : in t_gf128;
+        locator_4 : in t_gf128;
+        locator_5 : in t_gf128;
+        locator_6 : in t_gf128;
+        locator_7 : in t_gf128;
 
-        locator_degree : in unsigned(2 downto 0);
+        locator_degree : in unsigned(3 downto 0);
 
         busy : out std_logic;
         done : out std_logic;
@@ -27,6 +30,10 @@ entity bch_chien_search is
         error_position_0 : out unsigned(6 downto 0);
         error_position_1 : out unsigned(6 downto 0);
         error_position_2 : out unsigned(6 downto 0);
+        error_position_3 : out unsigned(6 downto 0);
+        error_position_4 : out unsigned(6 downto 0);
+        error_position_5 : out unsigned(6 downto 0);
+        error_position_6 : out unsigned(6 downto 0);
 
         error_count : out unsigned(2 downto 0);
 
@@ -42,63 +49,42 @@ end entity bch_chien_search;
 
 architecture rtl of bch_chien_search is
 
-    --------------------------------------------------------------------
-    -- alpha^-1 = alpha^126 = hexadecimal 44 in GF(2^7)
-    --
-    -- Primitive polynomial:
-    --
-    --     x^7 + x^3 + 1
-    --------------------------------------------------------------------
-    constant C_ALPHA_INVERSE : t_gf128 :=
-        std_logic_vector(to_unsigned(16#44#, 7));
+    type t_locator_array is
+        array (0 to C_BCH_T) of t_gf128;
 
-    --------------------------------------------------------------------
-    -- Captured locator polynomial
-    --------------------------------------------------------------------
-    signal locator_0_reg : t_gf128 := C_GF_ONE;
-    signal locator_1_reg : t_gf128 := C_GF_ZERO;
-    signal locator_2_reg : t_gf128 := C_GF_ZERO;
-    signal locator_3_reg : t_gf128 := C_GF_ZERO;
+    type t_position_array is
+        array (0 to C_BCH_T - 1) of unsigned(6 downto 0);
+
+    constant C_ALPHA_INVERSE_POWER : t_locator_array := (
+        0 => C_GF_ONE,
+        1 => gf_alpha_power(126),
+        2 => gf_alpha_power(125),
+        3 => gf_alpha_power(124),
+        4 => gf_alpha_power(123),
+        5 => gf_alpha_power(122),
+        6 => gf_alpha_power(121),
+        7 => gf_alpha_power(120)
+    );
+
+    signal term_reg : t_locator_array := (
+        0      => C_GF_ONE,
+        others => C_GF_ZERO
+    );
 
     signal locator_degree_reg :
-        natural range 0 to 7 := 0;
+        natural range 0 to 15 := 0;
 
-    --------------------------------------------------------------------
-    -- x_reg contains alpha^(-position_reg).
-    --
-    -- At position zero:
-    --
-    --     x_reg = alpha^0 = 1
-    --
-    -- After each position:
-    --
-    --     x_reg = x_reg * alpha^-1
-    --------------------------------------------------------------------
-    signal x_reg : t_gf128 := C_GF_ONE;
-
-    --------------------------------------------------------------------
-    -- Search progress
-    --------------------------------------------------------------------
     signal position_reg :
         natural range 0 to C_BCH_PARENT_N - 1 := 0;
 
     signal cycle_count_reg :
         natural range 0 to C_BCH_PARENT_N := 0;
 
-    --------------------------------------------------------------------
-    -- Located roots
-    --------------------------------------------------------------------
-    signal error_position_0_reg :
-        unsigned(6 downto 0) := (others => '0');
-
-    signal error_position_1_reg :
-        unsigned(6 downto 0) := (others => '0');
-
-    signal error_position_2_reg :
-        unsigned(6 downto 0) := (others => '0');
+    signal error_position_reg :
+        t_position_array := (others => (others => '0'));
 
     signal error_count_reg :
-        natural range 0 to 7 := 0;
+        natural range 0 to C_BCH_T := 0;
 
     signal root_count_matches_degree_reg :
         std_logic := '0';
@@ -114,20 +100,26 @@ architecture rtl of bch_chien_search is
 
 begin
 
-    --------------------------------------------------------------------
-    -- Outputs
-    --------------------------------------------------------------------
+    assert C_BCH_T = 7
+        report "bch_chien_search requires C_BCH_T = 7"
+        severity failure;
+
     busy <= busy_reg;
     done <= done_reg;
 
-    error_position_0 <= error_position_0_reg;
-    error_position_1 <= error_position_1_reg;
-    error_position_2 <= error_position_2_reg;
+    error_position_0 <= error_position_reg(0);
+    error_position_1 <= error_position_reg(1);
+    error_position_2 <= error_position_reg(2);
+    error_position_3 <= error_position_reg(3);
+    error_position_4 <= error_position_reg(4);
+    error_position_5 <= error_position_reg(5);
+    error_position_6 <= error_position_reg(6);
 
-    error_count <= to_unsigned(
-        error_count_reg,
-        error_count'length
-    );
+    error_count <=
+        to_unsigned(
+            error_count_reg,
+            error_count'length
+        );
 
     root_count_matches_degree <=
         root_count_matches_degree_reg;
@@ -135,44 +127,32 @@ begin
     shortened_position_error <=
         shortened_position_error_reg;
 
-    search_success <= search_success_reg;
+    search_success <=
+        search_success_reg;
 
-    current_position <= to_unsigned(
-        position_reg,
-        current_position'length
-    );
+    current_position <=
+        to_unsigned(
+            position_reg,
+            current_position'length
+        );
 
-    cycle_count <= to_unsigned(
-        cycle_count_reg,
-        cycle_count'length
-    );
+    cycle_count <=
+        to_unsigned(
+            cycle_count_reg,
+            cycle_count'length
+        );
 
 
-    --------------------------------------------------------------------
-    -- Chien search
-    --------------------------------------------------------------------
     process (clk)
-
-        variable x2_value :
-            t_gf128;
-
-        variable x3_value :
-            t_gf128;
 
         variable locator_result :
             t_gf128;
 
         variable root_count_next :
-            natural range 0 to 7;
+            natural range 0 to C_BCH_T;
 
-        variable position_0_next :
-            unsigned(6 downto 0);
-
-        variable position_1_next :
-            unsigned(6 downto 0);
-
-        variable position_2_next :
-            unsigned(6 downto 0);
+        variable position_next :
+            t_position_array;
 
         variable shortened_error_next :
             std_logic;
@@ -180,227 +160,144 @@ begin
         variable roots_match_next :
             std_logic;
 
-        variable search_success_next :
-            std_logic;
-
     begin
 
         if rising_edge(clk) then
 
-            ----------------------------------------------------------------
-            -- done is a one-clock pulse.
-            ----------------------------------------------------------------
             done_reg <= '0';
 
             if rst = '1' then
 
-                locator_0_reg <= C_GF_ONE;
-                locator_1_reg <= C_GF_ZERO;
-                locator_2_reg <= C_GF_ZERO;
-                locator_3_reg <= C_GF_ZERO;
+                term_reg <= (
+                    0      => C_GF_ONE,
+                    others => C_GF_ZERO
+                );
 
                 locator_degree_reg <= 0;
 
-                x_reg <= C_GF_ONE;
-
-                position_reg    <= 0;
+                position_reg <= 0;
                 cycle_count_reg <= 0;
 
-                error_position_0_reg <= (others => '0');
-                error_position_1_reg <= (others => '0');
-                error_position_2_reg <= (others => '0');
+                error_position_reg <=
+                    (others => (others => '0'));
 
                 error_count_reg <= 0;
 
                 root_count_matches_degree_reg <= '0';
-                shortened_position_error_reg  <= '0';
-                search_success_reg             <= '0';
+                shortened_position_error_reg <= '0';
+                search_success_reg <= '0';
 
                 busy_reg <= '0';
                 done_reg <= '0';
 
+
             elsif busy_reg = '0' then
 
-                ----------------------------------------------------------------
-                -- Accept a new locator polynomial.
-                ----------------------------------------------------------------
                 if start = '1' then
 
-                    locator_0_reg <= locator_0;
-                    locator_1_reg <= locator_1;
-                    locator_2_reg <= locator_2;
-                    locator_3_reg <= locator_3;
+                    if to_integer(locator_degree) > C_BCH_T then
 
-                    locator_degree_reg <=
-                        to_integer(locator_degree);
+                        locator_degree_reg <=
+                            to_integer(locator_degree);
 
-                    ----------------------------------------------------------------
-                    -- Position zero is evaluated at alpha^0 = 1.
-                    ----------------------------------------------------------------
-                    x_reg <= C_GF_ONE;
+                        error_position_reg <=
+                            (others => (others => '0'));
 
-                    position_reg    <= 0;
-                    cycle_count_reg <= 0;
+                        error_count_reg <= 0;
 
-                    error_position_0_reg <= (others => '0');
-                    error_position_1_reg <= (others => '0');
-                    error_position_2_reg <= (others => '0');
+                        root_count_matches_degree_reg <= '0';
+                        shortened_position_error_reg <= '0';
+                        search_success_reg <= '0';
 
-                    error_count_reg <= 0;
+                        position_reg <= 0;
+                        cycle_count_reg <= 0;
 
-                    root_count_matches_degree_reg <= '0';
-                    shortened_position_error_reg  <= '0';
-                    search_success_reg             <= '0';
+                        busy_reg <= '0';
+                        done_reg <= '1';
 
-                    busy_reg <= '1';
+                    else
+
+                        term_reg(0) <= locator_0;
+                        term_reg(1) <= locator_1;
+                        term_reg(2) <= locator_2;
+                        term_reg(3) <= locator_3;
+                        term_reg(4) <= locator_4;
+                        term_reg(5) <= locator_5;
+                        term_reg(6) <= locator_6;
+                        term_reg(7) <= locator_7;
+
+                        locator_degree_reg <=
+                            to_integer(locator_degree);
+
+                        position_reg <= 0;
+                        cycle_count_reg <= 0;
+
+                        error_position_reg <=
+                            (others => (others => '0'));
+
+                        error_count_reg <= 0;
+
+                        root_count_matches_degree_reg <= '0';
+                        shortened_position_error_reg <= '0';
+                        search_success_reg <= '0';
+
+                        busy_reg <= '1';
+
+                    end if;
 
                 end if;
+
 
             else
 
-                ----------------------------------------------------------------
-                -- Evaluate:
-                --
-                -- Lambda(x) =
-                --     locator_0
-                --   + locator_1*x
-                --   + locator_2*x^2
-                --   + locator_3*x^3
-                --
-                -- where x = alpha^(-position_reg).
-                ----------------------------------------------------------------
-                x2_value := gf_multiply(
-                    x_reg,
-                    x_reg
-                );
+                locator_result := C_GF_ZERO;
 
-                x3_value := gf_multiply(
-                    x2_value,
-                    x_reg
-                );
+                for j in 0 to C_BCH_T loop
 
-                locator_result := locator_0_reg;
+                    if j <= locator_degree_reg then
 
-                if locator_degree_reg >= 1 then
+                        locator_result :=
+                            locator_result xor term_reg(j);
 
-                    locator_result :=
-                        locator_result xor
-                        gf_multiply(
-                            locator_1_reg,
-                            x_reg
-                        );
+                    end if;
 
-                end if;
-
-                if locator_degree_reg >= 2 then
-
-                    locator_result :=
-                        locator_result xor
-                        gf_multiply(
-                            locator_2_reg,
-                            x2_value
-                        );
-
-                end if;
-
-                if locator_degree_reg >= 3 then
-
-                    locator_result :=
-                        locator_result xor
-                        gf_multiply(
-                            locator_3_reg,
-                            x3_value
-                        );
-
-                end if;
+                end loop;
 
 
-                ----------------------------------------------------------------
-                -- Copy current results into variables.
-                ----------------------------------------------------------------
                 root_count_next :=
                     error_count_reg;
 
-                position_0_next :=
-                    error_position_0_reg;
-
-                position_1_next :=
-                    error_position_1_reg;
-
-                position_2_next :=
-                    error_position_2_reg;
+                position_next :=
+                    error_position_reg;
 
                 shortened_error_next :=
                     shortened_position_error_reg;
 
 
-                ----------------------------------------------------------------
-                -- A zero result indicates a root.
-                ----------------------------------------------------------------
                 if locator_result = C_GF_ZERO then
 
-                    case root_count_next is
+                    if position_reg >= C_PUF_BITS then
 
-                        when 0 =>
+                        shortened_error_next := '1';
 
-                            position_0_next := to_unsigned(
+                    elsif root_count_next < C_BCH_T then
+
+                        position_next(root_count_next) :=
+                            to_unsigned(
                                 position_reg,
-                                position_0_next'length
+                                7
                             );
-
-                        when 1 =>
-
-                            position_1_next := to_unsigned(
-                                position_reg,
-                                position_1_next'length
-                            );
-
-                        when 2 =>
-
-                            position_2_next := to_unsigned(
-                                position_reg,
-                                position_2_next'length
-                            );
-
-                        when others =>
-
-                            null;
-
-                    end case;
-
-
-                    if root_count_next < 7 then
 
                         root_count_next :=
                             root_count_next + 1;
 
                     end if;
 
-
-                    ----------------------------------------------------------------
-                    -- Positions 120 through 126 are omitted shortening
-                    -- positions and must never contain errors.
-                    ----------------------------------------------------------------
-                    if position_reg >= C_PUF_BITS then
-
-                        shortened_error_next := '1';
-
-                    end if;
-
                 end if;
 
 
-                ----------------------------------------------------------------
-                -- Save updated root information.
-                ----------------------------------------------------------------
-                error_position_0_reg <=
-                    position_0_next;
-
-                error_position_1_reg <=
-                    position_1_next;
-
-                error_position_2_reg <=
-                    position_2_next;
+                error_position_reg <=
+                    position_next;
 
                 error_count_reg <=
                     root_count_next;
@@ -409,17 +306,10 @@ begin
                     shortened_error_next;
 
 
-                ----------------------------------------------------------------
-                -- Final position: 126.
-                ----------------------------------------------------------------
                 if position_reg = C_BCH_PARENT_N - 1 then
 
                     cycle_count_reg <=
                         C_BCH_PARENT_N;
-
-                    busy_reg <= '0';
-                    done_reg <= '1';
-
 
                     if root_count_next =
                        locator_degree_reg
@@ -436,38 +326,35 @@ begin
                     root_count_matches_degree_reg <=
                         roots_match_next;
 
-
                     if
-                        locator_degree_reg <= C_BCH_T
-                        and
                         roots_match_next = '1'
                         and
                         shortened_error_next = '0'
                     then
 
-                        search_success_next := '1';
+                        search_success_reg <= '1';
 
                     else
 
-                        search_success_next := '0';
+                        search_success_reg <= '0';
 
                     end if;
 
-                    search_success_reg <=
-                        search_success_next;
+                    busy_reg <= '0';
+                    done_reg <= '1';
+
 
                 else
 
-                    ----------------------------------------------------------------
-                    -- Move to the next position.
-                    --
-                    -- alpha^(-(i+1)) =
-                    --     alpha^(-i) * alpha^-1
-                    ----------------------------------------------------------------
-                    x_reg <= gf_multiply(
-                        x_reg,
-                        C_ALPHA_INVERSE
-                    );
+                    for j in 1 to C_BCH_T loop
+
+                        term_reg(j) <=
+                            gf_multiply(
+                                term_reg(j),
+                                C_ALPHA_INVERSE_POWER(j)
+                            );
+
+                    end loop;
 
                     position_reg <=
                         position_reg + 1;

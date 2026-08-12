@@ -6,7 +6,6 @@ library work;
 use work.parameters.all;
 use work.gf128_pkg.all;
 
-
 entity bch_syndrome_calculator is
     port (
         clk : in std_logic;
@@ -19,12 +18,20 @@ entity bch_syndrome_calculator is
         busy : out std_logic;
         done : out std_logic;
 
-        syndrome_1 : out t_gf128;
-        syndrome_2 : out t_gf128;
-        syndrome_3 : out t_gf128;
-        syndrome_4 : out t_gf128;
-        syndrome_5 : out t_gf128;
-        syndrome_6 : out t_gf128;
+        syndrome_1  : out t_gf128;
+        syndrome_2  : out t_gf128;
+        syndrome_3  : out t_gf128;
+        syndrome_4  : out t_gf128;
+        syndrome_5  : out t_gf128;
+        syndrome_6  : out t_gf128;
+        syndrome_7  : out t_gf128;
+        syndrome_8  : out t_gf128;
+        syndrome_9  : out t_gf128;
+        syndrome_10 : out t_gf128;
+        syndrome_11 : out t_gf128;
+        syndrome_12 : out t_gf128;
+        syndrome_13 : out t_gf128;
+        syndrome_14 : out t_gf128;
 
         syndromes_zero : out std_logic
     );
@@ -33,25 +40,25 @@ end entity bch_syndrome_calculator;
 
 architecture rtl of bch_syndrome_calculator is
 
-    --------------------------------------------------------------------
-    -- One syndrome is calculated for each root alpha^j,
-    -- where j = 1, 2, ..., 6.
-    --
-    -- For received polynomial:
-    --
-    --     r(x) = r_0 + r_1*x + ... + r_119*x^119
-    --
-    -- syndrome j is:
-    --
-    --     S_j = sum r_i * alpha^(i*j)
-    --------------------------------------------------------------------
+    type t_gf_array is
+        array (1 to C_BCH_SYNDROMES) of t_gf128;
 
-    constant C_ALPHA_1 : t_gf128 := gf_alpha_power(1);
-    constant C_ALPHA_2 : t_gf128 := gf_alpha_power(2);
-    constant C_ALPHA_3 : t_gf128 := gf_alpha_power(3);
-    constant C_ALPHA_4 : t_gf128 := gf_alpha_power(4);
-    constant C_ALPHA_5 : t_gf128 := gf_alpha_power(5);
-    constant C_ALPHA_6 : t_gf128 := gf_alpha_power(6);
+    constant C_ALPHA : t_gf_array := (
+        1  => gf_alpha_power(1),
+        2  => gf_alpha_power(2),
+        3  => gf_alpha_power(3),
+        4  => gf_alpha_power(4),
+        5  => gf_alpha_power(5),
+        6  => gf_alpha_power(6),
+        7  => gf_alpha_power(7),
+        8  => gf_alpha_power(8),
+        9  => gf_alpha_power(9),
+        10 => gf_alpha_power(10),
+        11 => gf_alpha_power(11),
+        12 => gf_alpha_power(12),
+        13 => gf_alpha_power(13),
+        14 => gf_alpha_power(14)
+    );
 
     signal codeword_reg : t_shortened_codeword :=
         (others => '0');
@@ -59,28 +66,11 @@ architecture rtl of bch_syndrome_calculator is
     signal bit_index :
         natural range 0 to C_PUF_BITS - 1 := 0;
 
-    signal syndrome_1_reg : t_gf128 := C_GF_ZERO;
-    signal syndrome_2_reg : t_gf128 := C_GF_ZERO;
-    signal syndrome_3_reg : t_gf128 := C_GF_ZERO;
-    signal syndrome_4_reg : t_gf128 := C_GF_ZERO;
-    signal syndrome_5_reg : t_gf128 := C_GF_ZERO;
-    signal syndrome_6_reg : t_gf128 := C_GF_ZERO;
+    signal syndrome_reg : t_gf_array :=
+        (others => C_GF_ZERO);
 
-    --------------------------------------------------------------------
-    -- At bit position i, these registers contain:
-    --
-    -- power_1 = alpha^(i*1)
-    -- power_2 = alpha^(i*2)
-    -- ...
-    -- power_6 = alpha^(i*6)
-    --------------------------------------------------------------------
-
-    signal power_1_reg : t_gf128 := C_GF_ONE;
-    signal power_2_reg : t_gf128 := C_GF_ONE;
-    signal power_3_reg : t_gf128 := C_GF_ONE;
-    signal power_4_reg : t_gf128 := C_GF_ONE;
-    signal power_5_reg : t_gf128 := C_GF_ONE;
-    signal power_6_reg : t_gf128 := C_GF_ONE;
+    signal power_reg : t_gf_array :=
+        (others => C_GF_ONE);
 
     signal busy_reg : std_logic := '0';
     signal done_reg : std_logic := '0';
@@ -89,67 +79,50 @@ architecture rtl of bch_syndrome_calculator is
 
 begin
 
-    --------------------------------------------------------------------
-    -- Outputs
-    --------------------------------------------------------------------
+    assert C_BCH_SYNDROMES = 14
+        report "bch_syndrome_calculator requires C_BCH_SYNDROMES = 14"
+        severity failure;
 
-    syndrome_1 <= syndrome_1_reg;
-    syndrome_2 <= syndrome_2_reg;
-    syndrome_3 <= syndrome_3_reg;
-    syndrome_4 <= syndrome_4_reg;
-    syndrome_5 <= syndrome_5_reg;
-    syndrome_6 <= syndrome_6_reg;
+    syndrome_1  <= syndrome_reg(1);
+    syndrome_2  <= syndrome_reg(2);
+    syndrome_3  <= syndrome_reg(3);
+    syndrome_4  <= syndrome_reg(4);
+    syndrome_5  <= syndrome_reg(5);
+    syndrome_6  <= syndrome_reg(6);
+    syndrome_7  <= syndrome_reg(7);
+    syndrome_8  <= syndrome_reg(8);
+    syndrome_9  <= syndrome_reg(9);
+    syndrome_10 <= syndrome_reg(10);
+    syndrome_11 <= syndrome_reg(11);
+    syndrome_12 <= syndrome_reg(12);
+    syndrome_13 <= syndrome_reg(13);
+    syndrome_14 <= syndrome_reg(14);
 
     busy <= busy_reg;
     done <= done_reg;
-
     syndromes_zero <= syndromes_zero_reg;
-
-
-    --------------------------------------------------------------------
-    -- Sequential syndrome calculation
-    --
-    -- One codeword bit is processed per clock cycle.
-    --
-    -- Total calculation time:
-    --
-    --     120 clock cycles after start is accepted
-    --------------------------------------------------------------------
 
     process (clk)
 
-        variable next_syndrome_1 : t_gf128;
-        variable next_syndrome_2 : t_gf128;
-        variable next_syndrome_3 : t_gf128;
-        variable next_syndrome_4 : t_gf128;
-        variable next_syndrome_5 : t_gf128;
-        variable next_syndrome_6 : t_gf128;
+        variable next_syndrome : t_gf_array;
+        variable all_zero      : std_logic;
 
     begin
 
         if rising_edge(clk) then
 
-            -- done is a one-clock pulse
             done_reg <= '0';
 
             if rst = '1' then
 
                 codeword_reg <= (others => '0');
-                bit_index    <= 0;
+                bit_index <= 0;
 
-                syndrome_1_reg <= C_GF_ZERO;
-                syndrome_2_reg <= C_GF_ZERO;
-                syndrome_3_reg <= C_GF_ZERO;
-                syndrome_4_reg <= C_GF_ZERO;
-                syndrome_5_reg <= C_GF_ZERO;
-                syndrome_6_reg <= C_GF_ZERO;
+                syndrome_reg <=
+                    (others => C_GF_ZERO);
 
-                power_1_reg <= C_GF_ONE;
-                power_2_reg <= C_GF_ONE;
-                power_3_reg <= C_GF_ONE;
-                power_4_reg <= C_GF_ONE;
-                power_5_reg <= C_GF_ONE;
-                power_6_reg <= C_GF_ONE;
+                power_reg <=
+                    (others => C_GF_ONE);
 
                 busy_reg <= '0';
                 done_reg <= '0';
@@ -158,148 +131,70 @@ begin
 
             elsif busy_reg = '0' then
 
-                --------------------------------------------------------
-                -- Accept a new calculation request
-                --------------------------------------------------------
-
                 if start = '1' then
 
                     codeword_reg <= received_codeword;
-                    bit_index    <= 0;
+                    bit_index <= 0;
 
-                    syndrome_1_reg <= C_GF_ZERO;
-                    syndrome_2_reg <= C_GF_ZERO;
-                    syndrome_3_reg <= C_GF_ZERO;
-                    syndrome_4_reg <= C_GF_ZERO;
-                    syndrome_5_reg <= C_GF_ZERO;
-                    syndrome_6_reg <= C_GF_ZERO;
+                    syndrome_reg <=
+                        (others => C_GF_ZERO);
 
-                    -- At bit position zero:
-                    --
-                    -- alpha^(0*j) = 1
-                    power_1_reg <= C_GF_ONE;
-                    power_2_reg <= C_GF_ONE;
-                    power_3_reg <= C_GF_ONE;
-                    power_4_reg <= C_GF_ONE;
-                    power_5_reg <= C_GF_ONE;
-                    power_6_reg <= C_GF_ONE;
+                    power_reg <=
+                        (others => C_GF_ONE);
 
                     busy_reg <= '1';
-
                     syndromes_zero_reg <= '0';
 
                 end if;
 
             else
 
-                --------------------------------------------------------
-                -- Begin with current accumulated syndromes
-                --------------------------------------------------------
-
-                next_syndrome_1 := syndrome_1_reg;
-                next_syndrome_2 := syndrome_2_reg;
-                next_syndrome_3 := syndrome_3_reg;
-                next_syndrome_4 := syndrome_4_reg;
-                next_syndrome_5 := syndrome_5_reg;
-                next_syndrome_6 := syndrome_6_reg;
-
-                --------------------------------------------------------
-                -- In a binary BCH code, the coefficient is either
-                -- zero or one.
-                --
-                -- When r_i = 1, add alpha^(i*j) to syndrome j.
-                -- Addition in GF(2^7) is XOR.
-                --------------------------------------------------------
+                next_syndrome := syndrome_reg;
 
                 if codeword_reg(bit_index) = '1' then
 
-                    next_syndrome_1 :=
-                        next_syndrome_1 xor power_1_reg;
+                    for j in 1 to C_BCH_SYNDROMES loop
 
-                    next_syndrome_2 :=
-                        next_syndrome_2 xor power_2_reg;
+                        next_syndrome(j) :=
+                            next_syndrome(j)
+                            xor power_reg(j);
 
-                    next_syndrome_3 :=
-                        next_syndrome_3 xor power_3_reg;
-
-                    next_syndrome_4 :=
-                        next_syndrome_4 xor power_4_reg;
-
-                    next_syndrome_5 :=
-                        next_syndrome_5 xor power_5_reg;
-
-                    next_syndrome_6 :=
-                        next_syndrome_6 xor power_6_reg;
+                    end loop;
 
                 end if;
 
-                syndrome_1_reg <= next_syndrome_1;
-                syndrome_2_reg <= next_syndrome_2;
-                syndrome_3_reg <= next_syndrome_3;
-                syndrome_4_reg <= next_syndrome_4;
-                syndrome_5_reg <= next_syndrome_5;
-                syndrome_6_reg <= next_syndrome_6;
-
-                --------------------------------------------------------
-                -- Final input bit
-                --------------------------------------------------------
+                syndrome_reg <= next_syndrome;
 
                 if bit_index = C_PUF_BITS - 1 then
 
                     busy_reg <= '0';
                     done_reg <= '1';
 
-                    if
-                        next_syndrome_1 = C_GF_ZERO and
-                        next_syndrome_2 = C_GF_ZERO and
-                        next_syndrome_3 = C_GF_ZERO and
-                        next_syndrome_4 = C_GF_ZERO and
-                        next_syndrome_5 = C_GF_ZERO and
-                        next_syndrome_6 = C_GF_ZERO
-                    then
-                        syndromes_zero_reg <= '1';
-                    else
-                        syndromes_zero_reg <= '0';
-                    end if;
+                    all_zero := '1';
+
+                    for j in 1 to C_BCH_SYNDROMES loop
+
+                        if next_syndrome(j) /= C_GF_ZERO then
+                            all_zero := '0';
+                        end if;
+
+                    end loop;
+
+                    syndromes_zero_reg <= all_zero;
 
                 else
 
-                    ----------------------------------------------------
-                    -- Advance to the next codeword bit
-                    ----------------------------------------------------
-
                     bit_index <= bit_index + 1;
 
-                    -- alpha^(i*j) becomes alpha^((i+1)*j)
-                    power_1_reg <= gf_multiply(
-                        power_1_reg,
-                        C_ALPHA_1
-                    );
+                    for j in 1 to C_BCH_SYNDROMES loop
 
-                    power_2_reg <= gf_multiply(
-                        power_2_reg,
-                        C_ALPHA_2
-                    );
+                        power_reg(j) <=
+                            gf_multiply(
+                                power_reg(j),
+                                C_ALPHA(j)
+                            );
 
-                    power_3_reg <= gf_multiply(
-                        power_3_reg,
-                        C_ALPHA_3
-                    );
-
-                    power_4_reg <= gf_multiply(
-                        power_4_reg,
-                        C_ALPHA_4
-                    );
-
-                    power_5_reg <= gf_multiply(
-                        power_5_reg,
-                        C_ALPHA_5
-                    );
-
-                    power_6_reg <= gf_multiply(
-                        power_6_reg,
-                        C_ALPHA_6
-                    );
+                    end loop;
 
                 end if;
 

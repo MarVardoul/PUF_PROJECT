@@ -66,3 +66,4 @@ set_property LOCK_PINS {I0:A6} [get_cells {PUF_COMP/CORE_COMP/BANK_COMP/GEN_CHAN
 
 
 
+
