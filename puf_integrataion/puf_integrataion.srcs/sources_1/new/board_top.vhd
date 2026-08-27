@@ -15,7 +15,19 @@ entity ro_puf_board_top is
         SYS_CLK_N   : in  std_logic;
         PL_USER_SW  : in  std_logic_vector(7 downto 0);
         PL_USER_PB  : in  std_logic_vector(1 downto 0);
-        PL_USER_LED : out std_logic_vector(4 downto 0)
+        PL_USER_LED : out std_logic_vector(4 downto 0);
+
+        PHY0_REFCLK : in  std_logic;
+        PHY0_RXD    : in  std_logic_vector(1 downto 0);
+        PHY0_CRS_DV : in  std_logic;
+        PHY0_TXD    : out std_logic_vector(1 downto 0);
+        PHY0_TX_EN  : out std_logic;
+
+        PHY1_REFCLK : in  std_logic;
+        PHY1_RXD    : in  std_logic_vector(1 downto 0);
+        PHY1_CRS_DV : in  std_logic;
+        PHY1_TXD    : out std_logic_vector(1 downto 0);
+        PHY1_TX_EN  : out std_logic
     );
 end entity ro_puf_board_top;
 
@@ -299,7 +311,14 @@ signal sha_done_internal :
 signal sha_digest_internal :
     std_logic_vector(255 downto 0) := (others => '0');
 
+signal puf_id_valid_internal :
+    std_logic := '0';
+
+signal puf_enable_internal :
+    std_logic;
+
     attribute MARK_DEBUG : string;
+    attribute DONT_TOUCH : string;
 
     attribute MARK_DEBUG of signature_internal :
         signal is "TRUE";
@@ -364,6 +383,9 @@ signal sha_digest_internal :
     attribute MARK_DEBUG of sha_digest_internal :
         signal is "true";
 
+    attribute DONT_TOUCH of RMII_SWITCH_COMP :
+        label is "TRUE";
+
 
 begin
 
@@ -376,6 +398,8 @@ begin
         and ecc_busy_internal = '0'
         else '0';
 
+    puf_enable_internal <=
+        PL_USER_SW(0);
 
     CLK_BUFFER :
         IBUFDS
@@ -549,6 +573,81 @@ begin
         busy      => sha_busy_internal,
         done      => sha_done_internal
     );
+
+
+    PUF_ID_VALID_REG :
+        process (sys_clk_internal)
+        begin
+            if rising_edge(sys_clk_internal) then
+
+                if PL_USER_PB(0) = '1' then
+
+                    puf_id_valid_internal <=
+                        '0';
+
+                elsif sha_done_internal = '1' then
+
+                    puf_id_valid_internal <=
+                        '1';
+
+                end if;
+
+            end if;
+        end process;
+
+
+    RMII_SWITCH_COMP :
+        entity work.puf_rmii_switch_2port
+        generic map (
+            CORE_CLK_HZ_G =>
+                100_000_000
+        )
+        port map (
+            core_clk =>
+                sys_clk_internal,
+
+            reset_p =>
+                PL_USER_PB(0),
+
+            puf_enable =>
+                puf_enable_internal,
+
+            puf_id_valid =>
+                puf_id_valid_internal,
+
+            puf_id =>
+                sha_digest_internal,
+
+            phy0_refclk =>
+                PHY0_REFCLK,
+
+            phy0_rxd =>
+                PHY0_RXD,
+
+            phy0_crs_dv =>
+                PHY0_CRS_DV,
+
+            phy0_txd =>
+                PHY0_TXD,
+
+            phy0_tx_en =>
+                PHY0_TX_EN,
+
+            phy1_refclk =>
+                PHY1_REFCLK,
+
+            phy1_rxd =>
+                PHY1_RXD,
+
+            phy1_crs_dv =>
+                PHY1_CRS_DV,
+
+            phy1_txd =>
+                PHY1_TXD,
+
+            phy1_tx_en =>
+                PHY1_TX_EN
+        );
 
 
     INTEGRATION_CONTROLLER :
